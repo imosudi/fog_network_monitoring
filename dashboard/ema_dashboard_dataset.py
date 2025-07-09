@@ -1,4 +1,4 @@
-# ---------------------- dashboard/ema_dashboard.py ----------------------
+# ---------------------- dashboard/ema_dashboard_dataset.py ----------------------
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import numpy as np
