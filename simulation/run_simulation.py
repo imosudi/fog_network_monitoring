@@ -1,8 +1,10 @@
+# ---------------------- simulation/run_simulation.py ----------------------
 # --- Launch Enhanced Real-Time Simulation ---
+
 from dashboard.ema_dashboard import EMALiveMultiNodeDashboard
 
 
-if __name__ == "__main__":
+"""if __name__ == "__main__":
     
     # Generate comprehensive dataset
     #dataset = generate_comprehensive_dataset(num_iterations=50)
@@ -25,4 +27,4 @@ if __name__ == "__main__":
     
     
     dashboard = EMALiveMultiNodeDashboard(sample_node_ids, max_display=len(sample_node_ids))
-    ani = dashboard.run()
+    ani = dashboard.run()"""

@@ -1,8 +1,9 @@
-        
+# ---------------------- core/node_dispatcher.py ----------------------        
 # Enhanced dispatcher with time-based variation and error handling
 from datetime import datetime, timedelta, timezone
 import json
 import os
+import time
 import numpy as np
 import pandas as pd
 from core.health_calculator import NodeHealthCalculator
@@ -277,7 +278,9 @@ def get_node_sample(node_id, base_time, time_step=0, node_list=None):
     node_meta = node_list[node_list['node_id'] == node_id].iloc[0] if not node_list.empty else None
     
     prefix = node_id[:3]
+    #print("prefix: ", prefix), time.sleep(3)
     index = int(node_id.split("_")[1])
+    #print("index: ", index), time.sleep(3)
     dynamic_seed = index * 13 + time_step
     
     try:
