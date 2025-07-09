@@ -13,7 +13,7 @@ fog_network_monitoring/
 │   ├── node_dispatcher.py         # Dispatcher for node sample generation
 │   └── sample_generators.py       # Tier-specific metric simulation
 ├── dashboard/
-│   ├── ema_dashboard.py           # Real-time EMA visualisation dashboard
+│   ├── ema_dashboard_dataset.py   # Real-time EMA visualisation dashboard with dataset collection
 │   └── __init__.py
 ├── data
 │   ├── nafmis_metadata.json

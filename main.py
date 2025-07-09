@@ -1,14 +1,8 @@
 # --- Launch Enhanced Real-Time Simulation ---
-#from dashboard.ema_dashboard import EMALiveMultiNodeDashboard
 from dashboard.ema_dashboard_dataset import EMALiveMultiNodeDashboard
-from simulation.data_generator import generate_comprehensive_dataset
 
 
 if __name__ == "__main__":
-    
-    # Generate comprehensive dataset
-    dataset = generate_comprehensive_dataset(num_iterations=50)
-    
     # Create a diverse set of nodes for testing
     sample_node_ids = [
         "L1N_01",
