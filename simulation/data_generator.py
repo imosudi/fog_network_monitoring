@@ -5,7 +5,7 @@ import json
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 from core.node_dispatcher import get_node_sample
-from core.sample_generators import create_node_list
+from utils.node_utils import create_node_list
 
 def generate_comprehensive_dataset(num_iterations=50, output_file="data/node_health_dataset.csv"):
     """
@@ -29,8 +29,8 @@ def generate_comprehensive_dataset(num_iterations=50, output_file="data/node_hea
 
         for _, node_info in node_list.iterrows():
             node_id = node_info['node_id']
-            if node_id.startswith('FarmHQ'):
-                continue  # Skip invalid node types
+            if node_id.startswith('CloudDB'):
+                continue  # Skip to avoid error: node types
 
             sample = get_node_sample(node_id, current_time, t, node_list)
             sample['iteration'] = t

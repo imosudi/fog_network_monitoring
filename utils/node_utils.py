@@ -1,9 +1,7 @@
-# ---------------------- utils/node_utils.py
-
+# ---------------------- core/sample_generators.py ----------------------
 import json
 import os
 import pandas as pd
-
 
 def create_node_list():
     """Create node list for Nigerian crop farming fog network"""
@@ -36,31 +34,31 @@ def create_node_list():
     ]
     
     # --- Node Definitions ---
-    # Layer 0: Farm Central (Local Server)
+    # Layer 0: Cloud Database Server
     node_data.append({
-        "node_id": "FarmHQ_Server",
+        "node_id": "CloudDB_Server",
         "tier": "L0",
-        "location": "Farm_Office",
-        "node_type": "Farm_Management_System",
-        "management_zone": "Entire_Farm",
+        "location": "Cloud_Provider",
+        "node_type": "Cloud_Database",
+        "management_zone": "Entire_Network",
         "crop_focus": "All_Crops",
         "criticality": "Mission_Critical",
-        "power_source": "Grid_Backup_Solar"
+        "power_source": "Grid_Backup"
     })
     
-    # Layer 1: Field Coordinator
+    # Layer 1: Farm Central (Local Server)
     node_data.append({
-        "node_id": "L1N_01",
+        "node_id": "L1N_01", #"FarmHQ_Server"
         "tier": "L1",
-        "location": "Main_Storage_Barn",
-        "node_type": "Field_Coordinator",
+        "location": "Farm_Office", #"location": "Main_Storage_Barn",
+        "node_type": "Farm_Management_System", #"node_type": "Field_Coordinator",
         "management_zone": "Entire_Farm",
         "crop_focus": "All_Crops",
         "criticality": "Ultra_High",
         "power_source": "Solar_Diesel_Hybrid"
     })
     
-    # Layer 2: Zone Managers (4 nodes)
+    # Layer 2: Zone Managers (4 nodes) 
     for i in range(1, 5):
         zone = crop_zones[i-1]
         node_data.append({
@@ -141,3 +139,4 @@ def create_node_list():
         }, f, indent=2)
     
     return df
+

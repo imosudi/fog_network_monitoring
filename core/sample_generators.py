@@ -3,7 +3,6 @@ import json
 import os
 import pandas as pd
 
-
 def create_node_list():
     """Create node list for Nigerian crop farming fog network"""
     node_data = []
@@ -37,7 +36,7 @@ def create_node_list():
     # --- Node Definitions ---
     # Layer 0: Cloud Database Server
     node_data.append({
-        "node_id": "FarmHQCloudDB_Server",
+        "node_id": "CloudDB_Server",
         "tier": "L0",
         "location": "Cloud_Provider",
         "node_type": "Cloud_Database",
@@ -47,7 +46,7 @@ def create_node_list():
         "power_source": "Grid_Backup"
     })
     
-    # Layer 1: Field Coordinator
+    # Layer 1: Farm Central (Local Server)
     node_data.append({
         "node_id": "L1N_01", #"FarmHQ_Server"
         "tier": "L1",
@@ -59,7 +58,7 @@ def create_node_list():
         "power_source": "Solar_Diesel_Hybrid"
     })
     
-    # Layer 2: Zone Managers (4 nodes)
+    # Layer 2: Zone Managers (4 nodes) 
     for i in range(1, 5):
         zone = crop_zones[i-1]
         node_data.append({
