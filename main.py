@@ -1,5 +1,6 @@
 # --- Launch Enhanced Real-Time Simulation ---
-from dashboard.ema_dashboard import EMALiveMultiNodeDashboard
+#from dashboard.ema_dashboard import EMALiveMultiNodeDashboard
+from dashboard.ema_dashboard_dataset import EMALiveMultiNodeDashboard
 from simulation.data_generator import generate_comprehensive_dataset
 
 

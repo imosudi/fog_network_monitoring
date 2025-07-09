@@ -5,6 +5,7 @@ import numpy as np
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 
+
 from core.node_dispatcher import get_node_sample
 
  # Enhanced EMA-based live health dashboard
@@ -15,6 +16,7 @@ class EMALiveMultiNodeDashboard:
         self.time_step = 0
         self.beta = ema_beta
         self.maxlen = 100
+
 
         self.health_histories = defaultdict(list)
         self.cpu_histories = defaultdict(list)
