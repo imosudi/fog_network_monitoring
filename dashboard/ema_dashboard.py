@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 
 from core.node_dispatcher import get_node_sample
+from core.health_calculator import NodeHealthCalculator # Added import
 
  # Enhanced EMA-based live health dashboard
 class EMALiveMultiNodeDashboard:
@@ -20,7 +21,9 @@ class EMALiveMultiNodeDashboard:
         self.cpu_histories = defaultdict(list)
         self.plr_histories = defaultdict(list)
         self.rtt_histories = defaultdict(list)
-        self.ema_health = {nid: None for nid in self.node_ids}
+        # self.ema_health = {nid: None for nid in self.node_ids} # Replaced by NodeHealthCalculator
+
+        self.health_calculator = NodeHealthCalculator(ema_beta=self.beta) # Instantiate NodeHealthCalculator
 
         n = len(self.node_ids)
         rows = (n + 3) // 4
@@ -71,56 +74,65 @@ class EMALiveMultiNodeDashboard:
             if sample is None:
                 continue
 
-            cpu = sample["cpu"]
-            plr = sample["plr"]
-            rtt = sample["rtt"]
+            # Prepare node_data for NodeHealthCalculator
+            node_data = {
+                'node_id': node_id,
+                'cpu': sample["cpu"],
+                'plr': sample["plr"],
+                'rtt': sample["rtt"],
+                'anomaly': sample.get('anomaly', 'none') # Ensure anomaly is passed
+            }
 
-            cpu_score = 1 - (cpu / 100)
-            plr_score = 1 - min(plr / 0.2, 1.0)
-            rtt_score = 1 - min(rtt / 400, 1.0)
-
+            # Calculate health metrics using NodeHealthCalculator
+            health_metrics = self.health_calculator.calculate_health_metrics(node_data)
             
-            # Weighted health score
-            #health_score = max(0.0, min(1.0, 0.3 * cpu_score + 0.3 * plr_score + 0.4 * rtt_score))
-            weighted_health_score    = 0.3 * cpu_score + 0.3 * plr_score + 0.4 * rtt_score
+            weighted_health_score = health_metrics['weighted_health_score'] # 0-100 scale
+            ema_health_score = health_metrics['ema_health_score'] # 0-100 scale
+            ema_health_threshold = health_metrics['ema_health_threshold'] # 0-100 scale
 
-            if self.ema_health[node_id] is None:
-                self.ema_health[node_id] = weighted_health_score
-            else:
-                self.ema_health[node_id] = (
-                    self.beta * weighted_health_score + (1 - self.beta) * self.ema_health[node_id]
-                )
+            # For plotting, we might need to normalize scores to 0-1 if axes limits are fixed at 0-1
+            # Or, adjust axes limits to 0-100. For now, let's assume we'll normalize for plotting.
+            # The health_histories will store the 0-100 scale EMA score.
             
-            health_threshold  = self.ema_health[node_id]
+            # Keep original CPU, PLR, RTT local score calculations for individual metric lines (0-1 scale)
+            cpu_plot_score = 1 - (sample["cpu"] / 100)
+            plr_plot_score = 1 - min(sample["plr"] / 0.2, 1.0) # Assuming 0.2 is max PLR for normalization
+            rtt_plot_score = 1 - min(sample["rtt"] / 400, 1.0) # Assuming 400ms is max RTT for normalization
 
-            #self.health_histories[node_id].append(health_threshold) #
-            self.health_histories[node_id].append(weighted_health_score)
-            self.cpu_histories[node_id].append(cpu_score)
-            self.plr_histories[node_id].append(plr_score)
-            self.rtt_histories[node_id].append(rtt_score)
+            self.health_histories[node_id].append(ema_health_score / 100.0) # Store normalized EMA for plot
+            self.cpu_histories[node_id].append(cpu_plot_score)
+            self.plr_histories[node_id].append(plr_plot_score)
+            self.rtt_histories[node_id].append(rtt_plot_score)
 
-            for hist in [self.health_histories, self.cpu_histories, self.plr_histories, self.rtt_histories]:
-                hist[node_id] = hist[node_id][-self.maxlen:]
+            for hist_dict in [self.health_histories, self.cpu_histories, self.plr_histories, self.rtt_histories]:
+                hist_dict[node_id] = hist_dict[node_id][-self.maxlen:]
 
             xs = list(range(len(self.health_histories[node_id])))
 
-            self.lines[node_id].set_data(xs, self.health_histories[node_id])
+            self.lines[node_id].set_data(xs, self.health_histories[node_id]) # Plotting EMA health score (normalized)
             self.cpu_lines[node_id].set_data(xs, self.cpu_histories[node_id])
             self.plr_lines[node_id].set_data(xs, self.plr_histories[node_id])
             self.rtt_lines[node_id].set_data(xs, self.rtt_histories[node_id])
 
             ax = self.axs[i]
             ax.set_xlim(0, max(self.maxlen, len(xs)))
-            print("node_id: ", node_id, "\nweighted_health_score - health_threshold: ", weighted_health_score - health_threshold)
-            if (weighted_health_score - health_threshold) > 0:
-                if weighted_health_score > 0.8:
-                    ax.set_title(f"{node_id} - Health (GOOD)", fontsize=10, color='green')
-                elif weighted_health_score > 0.6:
-                    ax.set_title(f"{node_id} - Health (FAIR)", fontsize=10, color='#FFC107')
-                else:
-                    ax.set_title(f"{node_id} - Health (POOR)", fontsize=10, color='#FF5722')
-            else:
-                ax.set_title(f"{node_id} - Faulty", fontsize=10, color='#607D8B')
+
+            # Health status determination will be updated in the next step
+            # For now, let's put a placeholder title or use the old logic to avoid errors
+            # This print will be removed/updated later.
+            print(f"Node: {node_id}, Raw Score: {weighted_health_score:.2f}, EMA Score: {ema_health_score:.2f}, EMA Threshold: {ema_health_threshold:.2f}")
+
+            # Determine health status based on NodeHealthCalculator's metrics
+            if ema_health_score < ema_health_threshold:
+                ax.set_title(f"{node_id} - FAULTY", fontsize=10, color='#607D8B') # Grey
+            # Statuses based on raw weighted_health_score (0-100 scale)
+            elif weighted_health_score > 80: # Corresponds to > 0.8 on a 0-1 scale
+                ax.set_title(f"{node_id} - Health (GOOD)", fontsize=10, color='green')
+            elif weighted_health_score > 60: # Corresponds to > 0.6 on a 0-1 scale
+                ax.set_title(f"{node_id} - Health (FAIR)", fontsize=10, color='#FFC107') # Amber
+            else: # weighted_health_score <= 60
+                ax.set_title(f"{node_id} - Health (POOR)", fontsize=10, color='#FF5722') # Orange-Red
+
 
         return [
             line for lines in [
