@@ -35,7 +35,10 @@ class EMALiveMultiNodeDashboard:
             'health_threshold': [],
             'health_difference': [],
             'health_status': [],
-            'anomaly_type': []
+            'anomaly_type': [],
+            'cpu_score': [],
+            'plr_score': [],
+            'rtt_score': []
         }
 
         # Set up the figure and axes
@@ -131,6 +134,9 @@ class EMALiveMultiNodeDashboard:
             self.dataset['health_difference'].append(health_difference)
             self.dataset['health_status'].append(health_status)
             self.dataset['anomaly_type'].append(anomaly_type)
+            self.dataset['cpu_score'].append(cpu_score)
+            self.dataset['plr_score'].append(plr_score)
+            self.dataset['rtt_score'].append(rtt_score)
 
             # Update plot histories
             self.health_histories[node_id].append(weighted_health_score)
