@@ -11,7 +11,7 @@ from utils.node_utils import create_node_list
 
 
 # ---- Enhanced Layered Node Generators with Proper Variability ----
-def generate_l1_node_samples(num_nodes=1, base_time=None, fault_rate=0.0005, anomaly_types=None, seed=99, iterations=50):
+def generate_l1_node_samples(num_nodes=1, base_time=None, fault_rate=0.0, anomaly_types=None, seed=99, iterations=50): # MODIFIED fault_rate from 0.0005 to 0.0
     base_time = base_time or datetime.now(timezone.utc)
     anomaly_types = anomaly_types or ["overload", "silence", "routing_loop", "fibre_cut"]
     data = []
@@ -39,7 +39,7 @@ def generate_l1_node_samples(num_nodes=1, base_time=None, fault_rate=0.0005, ano
             plr_base += node_rng.normal(0, 0.0002)
             rtt_base += node_rng.normal(0, 3)
             
-            cpu = np.clip(cpu_base, 5, 85)
+            cpu = np.clip(cpu_base, 5, 40) # MODIFIED upper clip from 85 to 40
             plr = np.clip(plr_base, 0.0, 0.03)
             rtt = np.clip(rtt_base, 25, 120)
             anomaly = "none"
@@ -70,7 +70,7 @@ def generate_l1_node_samples(num_nodes=1, base_time=None, fault_rate=0.0005, ano
 
     return pd.DataFrame(data)
 
-def generate_l2_node_samples(num_nodes=4, base_time=None, fault_rate=0.08, anomaly_types=None, seed=77, iterations=50):
+def generate_l2_node_samples(num_nodes=4, base_time=None, fault_rate=0.009, anomaly_types=None, seed=77, iterations=50): # MODIFIED fault_rate from 0.08 to 0.009
     base_time = base_time or datetime.now(timezone.utc)
     anomaly_types = anomaly_types or ["drift", "overload", "intermittent_loss", "silence"]
     data = []
@@ -131,7 +131,7 @@ def generate_l2_node_samples(num_nodes=4, base_time=None, fault_rate=0.08, anoma
 
     return pd.DataFrame(data)
 
-def generate_l3_node_samples(num_nodes=12, base_time=None, fault_rate=0.01, anomaly_types=None, seed=123, iterations=50):
+def generate_l3_node_samples(num_nodes=12, base_time=None, fault_rate=0.019, anomaly_types=None, seed=123, iterations=50): # MODIFIED fault_rate from 0.01 to 0.019
     base_time = base_time or datetime.now(timezone.utc)
     anomaly_types = anomaly_types or ["latency_spike", "throughput_drop", "drift", "offline"]
     data = []
@@ -189,7 +189,7 @@ def generate_l3_node_samples(num_nodes=12, base_time=None, fault_rate=0.01, anom
 
     return pd.DataFrame(data)
 
-def generate_l4_node_samples(num_nodes=36, base_time=None, fault_rate=0.23, anomaly_types=None, seed=42, iterations=50):
+def generate_l4_node_samples(num_nodes=36, base_time=None, fault_rate=0.029, anomaly_types=None, seed=42, iterations=50): # MODIFIED fault_rate from 0.23 to 0.029
     base_time = base_time or datetime.now(timezone.utc)
     anomaly_types = anomaly_types or ["spike", "drift", "silence", "overload"]
     data = []
