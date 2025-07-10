@@ -279,7 +279,11 @@ def get_node_sample(node_id, base_time, time_step=0, node_list=None):
     
     prefix = node_id[:3]
     #print("prefix: ", prefix), time.sleep(3)
-    index = int(node_id.split("_")[1])
+    try:
+        index = int(node_id.split("_")[1], 0)
+    except:
+        index = 0
+        
     #print("index: ", index), time.sleep(3)
     dynamic_seed = index * 13 + time_step
     
