@@ -113,7 +113,7 @@ class EMALiveMultiNodeDashboard:
             health_difference = weighted_health_score - health_threshold
 
             # Determine health status based on difference and absolute score
-            if health_difference > 0 or health_difference == 0:
+            if health_difference > 0:
                 if weighted_health_score > 0.8:
                     health_status = "GOOD"
                 elif weighted_health_score > 0.6:

@@ -21,27 +21,27 @@ def generate_l1_node_samples(num_nodes=1, base_time=None, fault_rate=0.0, anomal
         # Create unique random state for each node
         node_rng = np.random.RandomState(seed + i)
         
-        # Initialise trend variables for realistic variation
-        cpu_trend = node_rng.uniform(-0.1, 0.1)
-        plr_trend = node_rng.uniform(-0.0001, 0.0001)
-        rtt_trend = node_rng.uniform(-0.2, 0.2)
+        # Initialise trend variables for realistic variation (REFINED for L1)
+        cpu_trend = node_rng.uniform(-0.05, 0.05) # Was (-0.1, 0.1)
+        plr_trend = node_rng.uniform(-0.00005, 0.00005) # Was (-0.0001, 0.0001)
+        rtt_trend = node_rng.uniform(-0.1, 0.1) # Was (-0.2, 0.2)
         
         for t in range(iterations):
             timestamp = base_time + timedelta(seconds=30 * t)
             
-            # Add time-based variation and trends
-            cpu_base = 30 + cpu_trend * t + node_rng.normal(0, 7)
-            plr_base = 0.001 + plr_trend * t + node_rng.beta(1.5, 98) * 0.03
-            rtt_base = 70 + rtt_trend * t + node_rng.normal(0, 8)
+            # Add time-based variation and trends (REFINED for L1)
+            cpu_base = 30 + cpu_trend * t + node_rng.normal(0, 2) # Std dev was 7
+            plr_base = 0.001 + plr_trend * t + node_rng.beta(1.5, 98) * 0.01 # Multiplier was 0.03
+            rtt_base = 70 + rtt_trend * t + node_rng.normal(0, 3) # Std dev was 8
             
-            # Add random walk component for more realistic variation
-            cpu_base += node_rng.normal(0, 2)
-            plr_base += node_rng.normal(0, 0.0002)
-            rtt_base += node_rng.normal(0, 3)
+            # Add random walk component for more realistic variation (REFINED for L1)
+            cpu_base += node_rng.normal(0, 0.5) # Std dev was 2
+            plr_base += node_rng.normal(0, 0.00005) # Std dev was 0.0002
+            rtt_base += node_rng.normal(0, 1) # Std dev was 3
             
-            cpu = np.clip(cpu_base, 5, 40) # MODIFIED upper clip from 85 to 40
-            plr = np.clip(plr_base, 0.0, 0.03)
-            rtt = np.clip(rtt_base, 25, 120)
+            cpu = np.clip(cpu_base, 10, 25) # MODIFIED clip from (5, 40) to (10, 25)
+            plr = np.clip(plr_base, 0.0, 0.01) # MODIFIED upper clip from 0.03 to 0.01
+            rtt = np.clip(rtt_base, 25, 70) # MODIFIED upper clip from 120 to 70
             anomaly = "none"
 
             if node_rng.random() < fault_rate:
@@ -87,8 +87,8 @@ def generate_l2_node_samples(num_nodes=4, base_time=None, fault_rate=0.009, anom
         for t in range(iterations):
             timestamp = base_time + timedelta(seconds=30 * t)
             
-            # More dynamic base values
-            cpu_base = 45 + cpu_trend * t + node_rng.normal(0, 10)
+            # More dynamic base values (REFINED for L2)
+            cpu_base = 45 + cpu_trend * t + node_rng.normal(0, 8) # Std dev was 10
             plr_base = 0.002 + plr_trend * t + node_rng.beta(1.5, 98) * 0.06
             rtt_base = 85 + rtt_trend * t + node_rng.normal(0, 12)
             
@@ -97,9 +97,9 @@ def generate_l2_node_samples(num_nodes=4, base_time=None, fault_rate=0.009, anom
             plr_base += node_rng.normal(0, 0.0003)
             rtt_base += node_rng.normal(0, 4)
             
-            cpu = np.clip(cpu_base, 10, 95)
-            plr = np.clip(plr_base, 0.0, 0.06)
-            rtt = np.clip(rtt_base, 30, 160)
+            cpu = np.clip(cpu_base, 10, 70) # MODIFIED clip from (10, 95)
+            plr = np.clip(plr_base, 0.0, 0.05) # MODIFIED upper clip from 0.06
+            rtt = np.clip(rtt_base, 30, 150) # MODIFIED upper clip from 160
             anomaly = "none"
 
             if node_rng.random() < fault_rate:
@@ -148,8 +148,8 @@ def generate_l3_node_samples(num_nodes=12, base_time=None, fault_rate=0.019, ano
         for t in range(iterations):
             timestamp = base_time + timedelta(seconds=30 * t)
             
-            # Dynamic base values with cycles
-            cpu_base = 60 + cpu_trend * t + 5 * np.sin(t * 0.1) + node_rng.normal(0, 12)
+            # Dynamic base values with cycles (REFINED for L3)
+            cpu_base = 60 + cpu_trend * t + 5 * np.sin(t * 0.1) + node_rng.normal(0, 10) # Std dev was 12
             plr_base = 0.003 + plr_trend * t + node_rng.beta(1.8, 97) * 0.08
             rtt_base = 90 + rtt_trend * t + 10 * np.sin(t * 0.15) + node_rng.normal(0, 18)
             
@@ -158,9 +158,9 @@ def generate_l3_node_samples(num_nodes=12, base_time=None, fault_rate=0.019, ano
             plr_base += node_rng.normal(0, 0.0004)
             rtt_base += node_rng.normal(0, 6)
             
-            cpu = np.clip(cpu_base, 10, 100)
-            plr = np.clip(plr_base, 0.0, 0.08)
-            rtt = np.clip(rtt_base, 30, 220)
+            cpu = np.clip(cpu_base, 15, 70) # MODIFIED clip from (10, 100)
+            plr = np.clip(plr_base, 0.0, 0.07) # MODIFIED upper clip from 0.08
+            rtt = np.clip(rtt_base, 30, 180) # MODIFIED upper clip from 220
             anomaly = "none"
 
             if node_rng.random() < fault_rate:
@@ -206,8 +206,8 @@ def generate_l4_node_samples(num_nodes=36, base_time=None, fault_rate=0.029, ano
         for t in range(iterations):
             timestamp = base_time + timedelta(seconds=30 * t)
             
-            # High variability with multiple cycles
-            cpu_base = 50 + cpu_trend * t + 8 * np.sin(t * 0.2) + 3 * np.cos(t * 0.3) + node_rng.normal(0, 15)
+            # High variability with multiple cycles (REFINED for L4)
+            cpu_base = 50 + cpu_trend * t + 8 * np.sin(t * 0.2) + 3 * np.cos(t * 0.3) + node_rng.normal(0, 12) # Std dev was 15
             plr_base = 0.005 + plr_trend * t + node_rng.beta(2, 98) * 0.15
             rtt_base = 120 + rtt_trend * t + 20 * np.sin(t * 0.1) + node_rng.normal(0, 30)
             
@@ -216,9 +216,9 @@ def generate_l4_node_samples(num_nodes=36, base_time=None, fault_rate=0.029, ano
             plr_base += node_rng.normal(0, 0.0008)
             rtt_base += node_rng.normal(0, 10)
             
-            cpu = np.clip(cpu_base, 5, 100)
-            plr = np.clip(plr_base, 0.0, 0.15)
-            rtt = np.clip(rtt_base, 50, 300)
+            cpu = np.clip(cpu_base, 20, 80) # MODIFIED clip from (5, 100)
+            plr = np.clip(plr_base, 0.0, 0.10) # MODIFIED upper clip from 0.15
+            rtt = np.clip(rtt_base, 40, 220) # MODIFIED clip from (50, 300)
             anomaly = "none"
 
             if node_rng.random() < fault_rate:
@@ -279,10 +279,7 @@ def get_node_sample(node_id, base_time, time_step=0, node_list=None):
     
     prefix = node_id[:3]
     #print("prefix: ", prefix), time.sleep(3)
-    try:
-        index = int(node_id.split("_")[1])
-    except:
-        index = 0
+    index = int(node_id.split("_")[1])
     #print("index: ", index), time.sleep(3)
     dynamic_seed = index * 13 + time_step
     
