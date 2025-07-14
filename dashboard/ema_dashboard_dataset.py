@@ -10,21 +10,22 @@ from core.node_dispatcher import get_node_sample
 
 
 class EMALiveMultiNodeDashboard:
-    def __init__(self, node_ids, max_display=16, ema_beta=0.3):
-        self.node_ids = node_ids[:max_display]
+    def __init__(self, all_node_ids, sample_node_ids, max_display=16, ema_beta=0.3):
+        self.all_node_ids = all_node_ids
+        self.sample_node_ids = sample_node_ids[:max_display]
         self.base_time = datetime.now(timezone.utc)
         self.time_step = 0
         self.beta = ema_beta
         self.maxlen = 100
 
-        # Initialise metric histories
+        # Initialise metric histories (only for displayed nodes)
         self.health_histories = defaultdict(list)
         self.cpu_histories = defaultdict(list)
         self.plr_histories = defaultdict(list)
         self.rtt_histories = defaultdict(list)
-        self.ema_health = {nid: None for nid in self.node_ids}
+        self.ema_health = {nid: None for nid in self.all_node_ids}  # Track EMA for all nodes
         
-        # Initialise dataset storage
+        # Initialise dataset storage for all nodes
         self.dataset = {
             'timestamp': [],
             'node_id': [],
@@ -41,8 +42,8 @@ class EMALiveMultiNodeDashboard:
             'rtt_score': []
         }
 
-        # Set up the figure and axes
-        n = len(self.node_ids)
+        # Set up the figure and axes only for sample nodes
+        n = len(self.sample_node_ids)
         rows = (n + 3) // 4
         cols = min(4, n)
         self.fig, self.axs = plt.subplots(rows, cols, figsize=(16, 4 * rows))
@@ -58,7 +59,7 @@ class EMALiveMultiNodeDashboard:
         self.plr_lines = {}
         self.rtt_lines = {}
 
-        for i, node_id in enumerate(self.node_ids):
+        for i, node_id in enumerate(self.sample_node_ids):
             if i < len(self.axs):
                 ax = self.axs[i]
                 ax.set_title(f"{node_id} - Health Metrics", fontsize=10)
@@ -81,10 +82,8 @@ class EMALiveMultiNodeDashboard:
         self.time_step += 1
         current_time = datetime.now(timezone.utc)
 
-        for i, node_id in enumerate(self.node_ids):
-            if i >= len(self.axs):
-                continue
-
+        # Process all nodes but only update plots for sample nodes
+        for node_id in self.all_node_ids:
             sample = get_node_sample(node_id, self.base_time, self.time_step)
             if sample is None:
                 continue
@@ -92,7 +91,7 @@ class EMALiveMultiNodeDashboard:
             cpu = sample["cpu"]
             plr = sample["plr"]
             rtt = sample["rtt"]
-            anomaly_type = sample.get("anomaly_type", "normal")  # Default to "normal" if not specified
+            anomaly_type = sample.get("anomaly_type", "normal")
 
             cpu_score = 1 - (cpu / 100)
             plr_score = 1 - min(plr / 0.2, 1.0)
@@ -101,7 +100,7 @@ class EMALiveMultiNodeDashboard:
             # Weighted health score
             weighted_health_score = 0.3 * cpu_score + 0.3 * plr_score + 0.4 * rtt_score
 
-            # Update EMA health threshold
+            # Update EMA health threshold for all nodes
             if self.ema_health[node_id] is None:
                 self.ema_health[node_id] = weighted_health_score
             else:
@@ -123,7 +122,7 @@ class EMALiveMultiNodeDashboard:
             else:
                 health_status = "FAULTY"
 
-            # Store metrics in dataset
+            # Store metrics in dataset for all nodes
             self.dataset['timestamp'].append(current_time)
             self.dataset['node_id'].append(node_id)
             self.dataset['plr'].append(plr)
@@ -138,14 +137,20 @@ class EMALiveMultiNodeDashboard:
             self.dataset['plr_score'].append(plr_score)
             self.dataset['rtt_score'].append(rtt_score)
 
-            # Update plot histories
-            self.health_histories[node_id].append(weighted_health_score)
-            self.cpu_histories[node_id].append(cpu_score)
-            self.plr_histories[node_id].append(plr_score)
-            self.rtt_histories[node_id].append(rtt_score)
+            # Only update plot histories for sample nodes
+            if node_id in self.sample_node_ids:
+                self.health_histories[node_id].append(weighted_health_score)
+                self.cpu_histories[node_id].append(cpu_score)
+                self.plr_histories[node_id].append(plr_score)
+                self.rtt_histories[node_id].append(rtt_score)
 
-            for hist in [self.health_histories, self.cpu_histories, self.plr_histories, self.rtt_histories]:
-                hist[node_id] = hist[node_id][-self.maxlen:]
+                for hist in [self.health_histories, self.cpu_histories, self.plr_histories, self.rtt_histories]:
+                    hist[node_id] = hist[node_id][-self.maxlen:]
+
+        # Update plots only for sample nodes
+        for i, node_id in enumerate(self.sample_node_ids):
+            if i >= len(self.axs) or node_id not in self.health_histories:
+                continue
 
             xs = list(range(len(self.health_histories[node_id])))
 
@@ -157,12 +162,19 @@ class EMALiveMultiNodeDashboard:
             ax = self.axs[i]
             ax.set_xlim(0, max(self.maxlen, len(xs)))
             
+            # Get the latest health status for this node
+            latest_status = "UNKNOWN"
+            for idx in reversed(range(len(self.dataset['node_id']))):
+                if self.dataset['node_id'][idx] == node_id:
+                    latest_status = self.dataset['health_status'][idx]
+                    break
+
             # Update title with health status and color
-            if health_status == "GOOD":
+            if latest_status == "GOOD":
                 ax.set_title(f"{node_id} - Health (GOOD)", fontsize=10, color='green')
-            elif health_status == "FAIR":
+            elif latest_status == "FAIR":
                 ax.set_title(f"{node_id} - Health (FAIR)", fontsize=10, color='#FFC107')
-            elif health_status == "POOR":
+            elif latest_status == "POOR":
                 ax.set_title(f"{node_id} - Health (POOR)", fontsize=10, color='#FF5722')
             else:
                 ax.set_title(f"{node_id} - Faulty", fontsize=10, color='#607D8B')
@@ -177,7 +189,7 @@ class EMALiveMultiNodeDashboard:
         """Return the collected metrics as a pandas DataFrame"""
         return pd.DataFrame(self.dataset)
     
-    def save_metrics_to_csv(self, filename="node_metrics.csv"):
+    def save_metrics_to_csv(self, filename="data/node_metrics_data.csv"):
         """Save the collected metrics to a CSV file"""
         df = self.get_metrics_dataset()
         df.to_csv(filename, index=False)
@@ -187,6 +199,3 @@ class EMALiveMultiNodeDashboard:
         ani = FuncAnimation(self.fig, self.update_plot, interval=300, blit=False, cache_frame_data=False)
         plt.show()
         return ani
-    
-    
-    
