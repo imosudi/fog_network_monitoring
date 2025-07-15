@@ -1,7 +1,22 @@
 # --- Launch Enhanced Real-Time Simulation ---
+import os
+from core.sample_generators import create_node_list
 from dashboard.ema_dashboard_dataset import EMALiveMultiNodeDashboard
 from utils.node_id_extractor import extract_node_ids, extract_node_ids_from_string
 
+import pandas as pd
+try:
+    all_node_ids = extract_node_ids('data/node_list.csv')    
+except :
+    node_list_path = "data/node_list.csv"
+    if os.path.exists(node_list_path):
+        node_list = pd.read_csv(node_list_path)
+    else:
+        node_list = create_node_list()
+    all_node_ids = extract_node_ids('data/node_list.csv') 
+    
+print("All node_ids: ", all_node_ids)
+n = 16  # Size of sample nodes
 
 if __name__ == "__main__":
     # Create a diverse set of nodes for testing
