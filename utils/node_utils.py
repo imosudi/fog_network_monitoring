@@ -142,7 +142,7 @@ def create_node_list():
     return df
 
 
-def select_random_nodes(node_ids, n):
+def select_any_random_nodes(node_ids, n):
     """
     Randomly select N items from a list of node_ids.
     
@@ -157,3 +157,38 @@ def select_random_nodes(node_ids, n):
         raise ValueError(f"Cannot select {n} items from a list of {len(node_ids)} items")
     
     return random.sample(node_ids, n)
+
+def select_random_nodes(node_ids, n):
+    """
+    Randomly select N items from a list of node_ids, always including:
+    - Layer 0 node ('CloudDB_Server')
+    - Layer 1 node ('L1N_01')
+    - All Layer 2 nodes ('L2N_01', 'L2N_02', 'L2N_03', 'L2N_04')
+    The remaining nodes are randomly selected from layers 3 and 4.
+    
+    Args:
+        node_ids: List of strings (node identifiers)
+        n: Number of items to select
+    
+    Returns:
+        List of selected node_ids
+    """
+    # Define the mandatory nodes
+    mandatory_nodes = ['CloudDB_Server', 'L1N_01', 'L2N_01', 'L2N_02', 'L2N_03', 'L2N_04']
+    
+    # Calculate how many additional nodes we need to select
+    remaining_n = n - len(mandatory_nodes)
+    
+    if remaining_n < 0:
+        raise ValueError(f"n must be at least {len(mandatory_nodes)} to include all mandatory nodes")
+    if n > len(node_ids):
+        raise ValueError(f"Cannot select {n} items from a list of {len(node_ids)} items")
+    
+    # Get all layer 3 and 4 nodes (all nodes that aren't in mandatory_nodes)
+    remaining_nodes = [node for node in node_ids if node not in mandatory_nodes]
+    
+    # Select random nodes from remaining nodes
+    selected_random_nodes = random.sample(remaining_nodes, remaining_n)
+    
+    # Combine mandatory nodes with randomly selected nodes
+    return mandatory_nodes + selected_random_nodes

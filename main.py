@@ -32,7 +32,7 @@ if __name__ == "__main__":
     ]
     
     # If you want to use random selection instead, uncomment:
-    # sample_node_ids = select_random_nodes(all_node_ids, n)
+    sample_node_ids = select_random_nodes(all_node_ids, n)
     
     print("Starting Enhanced Multi-Node Network Dashboard...")
     print(f"Monitoring {len(sample_node_ids)} sample nodes with enhanced variability")
