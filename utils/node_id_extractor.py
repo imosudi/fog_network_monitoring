@@ -226,4 +226,5 @@ L4N_01	L4	Sorghum_Crop_Canopy	Field_Sensor	Cereal_Belt	Sorghum	Standard	Battery_
     print_node_summary(node_ids)
 
 if __name__ == "__main__":
-    main()
+    #main()
+    pass
