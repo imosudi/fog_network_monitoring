@@ -1,6 +1,7 @@
 # ---------------------- core/sample_generators.py ----------------------
 import json
 import os
+import random
 import pandas as pd
 
 def create_node_list():
@@ -139,4 +140,21 @@ def create_node_list():
         }, f, indent=2)
     
     return df
+
+
+def select_random_nodes(node_ids, n):
+    """
+    Randomly select N items from a list of node_ids.
+    
+    Args:
+        node_ids: List of strings (node identifiers)
+        n: Number of items to select
+    
+    Returns:
+        List of randomly selected node_ids
+    """
+    if n > len(node_ids):
+        raise ValueError(f"Cannot select {n} items from a list of {len(node_ids)} items")
+    
+    return random.sample(node_ids, n)
 

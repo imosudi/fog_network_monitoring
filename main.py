@@ -5,6 +5,8 @@ from dashboard.ema_dashboard_dataset import EMALiveMultiNodeDashboard
 from utils.node_id_extractor import extract_node_ids, extract_node_ids_from_string
 
 import pandas as pd
+
+from utils.node_utils import select_random_nodes
 try:
     all_node_ids = extract_node_ids('data/node_list.csv')    
 except :
@@ -18,11 +20,13 @@ except :
 print("All node_ids: ", all_node_ids)
 n = 16  # Size of sample nodes
 
+sample_node_ids = select_random_nodes(all_node_ids, n)
+
 if __name__ == "__main__":
     # Create a diverse set of nodes for testing
     node_ids = extract_node_ids('data/node_list.csv')
     print("node_ids: ", node_ids)
-    sample_node_ids = [
+    sample_node_ids_static = [
         "L1N_01",
         "L2N_01", "L2N_02", "L2N_03", "L2N_04",
         "L3N_01", "L3N_02", "L3N_03", "L3N_04","L3N_05", "L3N_06", "L3N_07", "L3N_08",
