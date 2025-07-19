@@ -1,5 +1,7 @@
+
 # ---------------------- dashboard/ema_dashboard_dataset.py ----------------------
 import json
+import os
 import time
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
@@ -8,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 import pandas as pd
 
-from core.node_dispatcher import get_node_sample
+from core.node_dispatcher import generate_layer_aware_degradation, get_node_sample, generate_gradual_degradation
 from utils.node_utils import fogNodeCharacterisation
 
 OUTPUT_FILE = 'data/node_health_metric.json'
@@ -111,14 +113,50 @@ class EMALiveMultiNodeDashboard:
         # Process all nodes but only update plots for sample nodes
         for node_id in self.all_node_ids:
             node_metric = {}
-            sample = get_node_sample(node_id, self.base_time, self.time_step)
+            
+            # By default i.e running simulation, the node metrics be loaded from data/initialisation_node_metric.json
+            # If data/initialisation_node_metric.json not available bcos not yet generated implying the begining of simulation
+            # generate using get_node_sample()
+            
+            #  Loading data from the persistent storage for node statistics
+            try:
+                if os.path.exists('data/initialisation_node_metric.json'):
+                    with open('data/initialisation_node_metric.json', 'r') as f:
+                        node_stats = json.load(f)
+                        if node_id in node_stats:
+                            sample = node_stats[node_id]
+                            #print("sample: ", sample); time.sleep(30)
+                        else:
+                            # Node not found in JSON, get sample from function
+                            sample = get_node_sample(node_id, self.base_time, self.time_step)
+                else:
+                    # File doesn't exist, get sample from function
+                    sample = get_node_sample(node_id, self.base_time, self.time_step)
+                    
+            except (json.JSONDecodeError, IOError, OSError) as e:
+                print(f"Warning: Could not load node statistics from data/initialisation_node_metric.json: {e}")
+                sample = get_node_sample(node_id, self.base_time, self.time_step)
+            
+            
+                
+            #sample = get_node_sample(node_id, self.base_time, self.time_step)
             if sample is None:
                 continue
-
+            #print("sample: ", sample); time.sleep(30)
+            try:
+                cycle = sample["cycle"]
+            except :
+                cycle = 0
+            #node_id
             cpu = sample["cpu"]
             plr = sample["plr"]
             rtt = sample["rtt"]
-            anomaly_type = sample.get("anomaly_type", "normal")
+            degraded_data = generate_layer_aware_degradation(cycle, node_id, cpu, plr, rtt)
+            cpu = degraded_data["cpu"]
+            plr = degraded_data["plr"]
+            rtt = degraded_data["rtt"]
+            anomaly_type = degraded_data["anomaly"]
+            #anomaly_type = sample.get("anomaly_type", "normal")
 
             cpu_score = 1 - (cpu / 100)
             plr_score = 1 - min(plr / 0.2, 1.0)
@@ -135,12 +173,30 @@ class EMALiveMultiNodeDashboard:
                 #metrics["Accuracy"]
             )
             node_metric['cycle']        = self.time_step 
-            node_metric['plr_mu']       = updated_stats["PLR"]["mu"] 
-            node_metric['plr_sigma']    = updated_stats["PLR"]["sigma"]
-            node_metric['ttl_mu']       = updated_stats["TTL"]["mu"] 
-            node_metric['ttl_siggma']   = updated_stats["TTL"]["sigma"]
-            node_metric['cpu_mu']       = updated_stats["CPU"]["mu"]
-            node_metric['cpu_sigma']    = updated_stats["CPU"]["sigma"]
+            print("node_id: ", node_id)
+            node_metric["timestamp"] = current_time.isoformat()
+            node_metric["node_id"] = node_id
+            node_metric["plr"] = plr
+            node_metric["cpu"] = cpu
+            node_metric["rtt"] = rtt
+            node_metric['PLR'] = {}
+            node_metric['TTL'] = {}
+            node_metric['CPU'] = {}
+            node_metric['PLR']['n'] = self.iteration_counter
+            node_metric['TTL']['n'] = self.iteration_counter
+            node_metric['CPU']['n'] = self.iteration_counter
+            
+            
+            node_metrics[node_id] = node_metric
+            node_metric['PLR']['mu']        = updated_stats["PLR"]["mu"] 
+            node_metric['PLR']['sigma']     = updated_stats["PLR"]["sigma"]
+            node_metric['PLR']["sum_sq"]    = updated_stats["PLR"]["sum_sq"]
+            node_metric['TTL']['mu']        = updated_stats["TTL"]["mu"] 
+            node_metric['TTL']['sigma']     = updated_stats["TTL"]["sigma"]
+            node_metric['TTL']["sum_sq"]    = updated_stats["TTL"]["sum_sq"]
+            node_metric['CPU']['mu']        = updated_stats["CPU"]["mu"]
+            node_metric['CPU']['sigma']     = updated_stats["CPU"]["sigma"]
+            node_metric['CPU']["sum_sq"]    = updated_stats["CPU"]["sum_sq"]
             
             #print("node_id, plr, rtt, cpu: ", node_id, plr, rtt,    cpu)
             #print("updated_stats: ", updated_stats); #time.sleep(300)
@@ -186,20 +242,13 @@ class EMALiveMultiNodeDashboard:
             else:
                 health_status = "FAULTY"
 
-            print("node_id: ", node_id)
-            node_metric["timestamp"] = current_time.isoformat()
-            node_metric["node_id"] = node_id
-            node_metric["plr"] = plr
-            node_metric["cpu"] = cpu
-            node_metric["rtt"] = rtt
+            
+            
             node_metric["health_threshold"] = health_threshold
             node_metric["health_metric"] = health_metric
             node_metric["health_status"] = health_status
-            
-            node_metrics[node_id] = node_metric
-            
         
-            print("node_metric: ", node_metric)
+            #("node_metric: ", node_metric)
             # Store metrics
             self.dataset['timestamp'].append(current_time.isoformat())
             self.dataset['node_id'].append(node_id)
@@ -227,8 +276,9 @@ class EMALiveMultiNodeDashboard:
                            self.plr_histories, self.rtt_histories,
                            self.threshold_histories]:
                     hist[node_id] = hist[node_id][-self.maxlen:]
-
-        print("node_metrics: ", node_metrics); time.sleep(3)
+        self.iteration_counter+=1
+            
+        #print("node_metrics: ", node_metrics); time.sleep(3)
         with open('data/initialisation_node_metric.json', 'w') as fp:
             json.dump(node_metrics, fp, indent=4) 
         # Update plots only for sample nodes

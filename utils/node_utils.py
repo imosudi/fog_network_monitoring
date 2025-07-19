@@ -211,7 +211,16 @@ class fogNodeCharacterisation(object):
         self.ALPHA = ALPHA
         
         # Persistent storage for node statistics
-        self.node_stats = {}  
+        try:
+            if os.path.exists('data/initialisation_node_metric.json'):
+                with open('data/initialisation_node_metric.json', 'r') as f:
+                    self.node_stats = json.load(f)
+            else:
+                self.node_stats = {}
+        except (json.JSONDecodeError, IOError, OSError) as e:
+            print(f"Warning: Could not load node statistics from data/initialisation_node_metric.json: {e}")
+            self.node_stats = {}
+    
         self.current_thresholds = {}
         self.M2 = 0.0
         
@@ -241,7 +250,7 @@ class fogNodeCharacterisation(object):
     def muAndsigma_per_node(self, node_id: int, new_plr: float, new_ttl: float, new_cpu: float) -> Dict:
         """Calculate running statistics with warmup period handling"""
         if node_id not in self.node_stats:
-            self._initialize_node_stats(node_id)
+            self._initialise_node_stats(node_id)
             
         self.node_sample_counts[node_id] += 1
         
@@ -251,8 +260,9 @@ class fogNodeCharacterisation(object):
             ("TTL", new_ttl), 
             ("CPU", new_cpu)
         ]
-
+        
         for metric, value in metrics:
+            #print("self.node_stats[node_id]: ", self.node_stats[node_id]); time.sleep(2)    
             stats = self.node_stats[node_id][metric]
             stats["n"] += 1
             delta = value - stats["mu"]
@@ -269,7 +279,8 @@ class fogNodeCharacterisation(object):
 
             updated_metrics[metric] = {
                 "mu": stats["mu"],
-                "sigma": stats["sigma"]
+                "sigma": stats["sigma"],
+                "sum_sq": stats["sum_sq"]
             }
 
         return updated_metrics
@@ -342,8 +353,8 @@ class fogNodeCharacterisation(object):
         return h
 
 
-    def _initialize_node_stats(self, node_id: str):
-        """Initialize statistics for a new node"""
+    def _initialise_node_stats(self, node_id: str):
+        """Initialise statistics for a new node"""
         self.node_stats[node_id] = {
             "PLR": {"n": 0, "mu": 0, "sum_sq": 0, "sigma": self.INITIAL_SIGMA["PLR"]},
             "TTL": {"n": 0, "mu": 0, "sum_sq": 0, "sigma": self.INITIAL_SIGMA["TTL"]},
