@@ -1,4 +1,6 @@
 # ---------------------- dashboard/ema_dashboard_dataset.py ----------------------
+import json
+import time
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import numpy as np
@@ -7,7 +9,9 @@ from collections import defaultdict
 import pandas as pd
 
 from core.node_dispatcher import get_node_sample
+from utils.node_utils import fogNodeCharacterisation
 
+OUTPUT_FILE = 'data/node_health_metric.json'
 
 class EMALiveMultiNodeDashboard:
     def __init__(self, all_node_ids, sample_node_ids, max_display=16, ema_beta=0.3):
@@ -23,67 +27,90 @@ class EMALiveMultiNodeDashboard:
         self.cpu_histories = defaultdict(list)
         self.plr_histories = defaultdict(list)
         self.rtt_histories = defaultdict(list)
-        self.ema_health = {nid: None for nid in self.all_node_ids}  # Track EMA for all nodes
-        
+        self.threshold_histories = defaultdict(list)
+        self.ema_health = {nid: None for nid in self.all_node_ids}
+        self.WEIGHTS            = {"PLR": 0.4, "TTL": 0.4, "CPU": 0.3} #, "Accuracy": 0.2}
+        self.STATIC_THRESHOLDS  = {"PLR": 10, "TTL": 200, "CPU": 80}#, "Accuracy": 80}
+        self.ALPHA=0.2
+        self.iteration_counter = 0
+
         # Initialise dataset storage for all nodes
         self.dataset = {
-            'timestamp': [],
-            'node_id': [],
-            'plr': [],
-            'cpu': [],
-            'rtt': [],
-            'weighted_health_score': [],
-            'health_threshold': [],
-            'health_difference': [],
-            'health_status': [],
-            'anomaly_type': [],
-            'cpu_score': [],
-            'plr_score': [],
-            'rtt_score': []
+            'timestamp': [], 'node_id': [], 'plr': [], 'cpu': [], 'rtt': [],
+            'health_metric': [], 'health_threshold': [],
+            'health_difference': [], 'health_status': [], 'anomaly_type': [],
+            'cpu_score': [], 'plr_score': [], 'rtt_score': []
         }
 
-        # Set up the figure and axes only for sample nodes
+        # Create a grid of subplots with proper spacing
         n = len(self.sample_node_ids)
-        rows = (n + 3) // 4
+        rows = (n + 3) // 4  # Maximum 4 columns
         cols = min(4, n)
-        self.fig, self.axs = plt.subplots(rows, cols, figsize=(16, 4 * rows))
+        
+        # Calculate figure size based on number of nodes
+        fig_width = min(20, 5 * cols)
+        fig_height = min(17, 4 * rows)
+        
+        self.fig = plt.figure(figsize=(fig_width, fig_height), constrained_layout=True)
         self.fig.suptitle('Real-Time Network Node Health Dashboard (EMA)', fontsize=16)
-
-        if rows == 1:
-            self.axs = [self.axs] if n == 1 else self.axs
-        else:
-            self.axs = self.axs.flatten()
-
+        
+        # Create a grid specification with proper spacing
+        gs = self.fig.add_gridspec(rows, cols, hspace=0.15, wspace=0.05)
+        
+        self.axs = []
         self.lines = {}
         self.cpu_lines = {}
         self.plr_lines = {}
         self.rtt_lines = {}
+        self.threshold_lines = {}
 
         for i, node_id in enumerate(self.sample_node_ids):
-            if i < len(self.axs):
-                ax = self.axs[i]
-                ax.set_title(f"{node_id} - Health Metrics", fontsize=10)
-                ax.set_xlim(0, self.maxlen)
-                ax.set_ylim(0, 1)
-                ax.grid(True, alpha=0.3)
-
-                self.lines[node_id], = ax.plot([], [], 'b-', linewidth=2, label='Health Score')
-                self.cpu_lines[node_id], = ax.plot([], [], 'r--', alpha=0.7, label='CPU (norm)')
-                self.plr_lines[node_id], = ax.plot([], [], 'g:', alpha=0.7, label='PLR (norm)')
-                self.rtt_lines[node_id], = ax.plot([], [], 'm-.', alpha=0.7, label='RTT (norm)')
-
-                ax.legend(loc="upper right", fontsize=8)
-                ax.set_xlabel('Time Steps', fontsize=8)
-                ax.set_ylabel('Normalised Values', fontsize=8)
-
-        plt.tight_layout()
+            row = i // cols
+            col = i % cols
+            ax = self.fig.add_subplot(gs[row, col])
+            self.axs.append(ax)
+            
+            # Set up the plot with borders to make it look like a separate box
+            for spine in ax.spines.values():
+                spine.set_visible(True)
+                spine.set_color('#dddddd')
+                spine.set_linewidth(1.5)
+            
+            # Set background color to make each plot distinct
+            ax.set_facecolor('#f8f9fa')
+            ax.grid(True, color='white', linestyle='-', linewidth=1)
+            
+            ax.set_title(f"{node_id}", fontsize=12, pad=10)
+            ax.set_xlim(0, self.maxlen)
+            ax.set_ylim(0, 1)
+            
+            # Create plot lines
+            self.lines[node_id], = ax.plot([], [], 'b-', linewidth=2, label='Health')
+            self.cpu_lines[node_id], = ax.plot([], [], 'r--', alpha=0.7, label='CPU')
+            self.plr_lines[node_id], = ax.plot([], [], 'g:', alpha=0.7, label='PLR')
+            self.rtt_lines[node_id], = ax.plot([], [], 'm-.', alpha=0.7, label='RTT')
+            self.threshold_lines[node_id], = ax.plot([], [], 'k--', alpha=0.5, label='Threshold')
+            
+            # Add legend inside the plot
+            ax.legend(loc="upper right", fontsize=8, framealpha=0.9)
+            
+            # Add labels only to bottom and leftmost plots
+            if col == 0:
+                ax.set_ylabel('Score', fontsize=9)
+            if row == rows - 1 or i == n - 1:
+                ax.set_xlabel('Time Steps', fontsize=9)
+                
+            # Rotate x-axis labels for better readability
+            ax.tick_params(axis='x', labelsize=8)
+            ax.tick_params(axis='y', labelsize=8)
 
     def update_plot(self, frame):
         self.time_step += 1
         current_time = datetime.now(timezone.utc)
-
+        node_metrics = {}
         # Process all nodes but only update plots for sample nodes
         for node_id in self.all_node_ids:
+            node_metric = {}
             sample = get_node_sample(node_id, self.base_time, self.time_step)
             if sample is None:
                 continue
@@ -97,10 +124,42 @@ class EMALiveMultiNodeDashboard:
             plr_score = 1 - min(plr / 0.2, 1.0)
             rtt_score = 1 - min(rtt / 400, 1.0)
 
+            fognodecharacterisation = fogNodeCharacterisation(self.WEIGHTS, self.STATIC_THRESHOLDS, self.ALPHA)
+            
+            # Update stats, compute health
+            updated_stats = fognodecharacterisation.muAndsigma_per_node(
+                node_id, 
+                plr, 
+                rtt, 
+                cpu, 
+                #metrics["Accuracy"]
+            )
+            node_metric['cycle']        = self.time_step 
+            node_metric['plr_mu']       = updated_stats["PLR"]["mu"] 
+            node_metric['plr_sigma']    = updated_stats["PLR"]["sigma"]
+            node_metric['ttl_mu']       = updated_stats["TTL"]["mu"] 
+            node_metric['ttl_siggma']   = updated_stats["TTL"]["sigma"]
+            node_metric['cpu_mu']       = updated_stats["CPU"]["mu"]
+            node_metric['cpu_sigma']    = updated_stats["CPU"]["sigma"]
+            
+            #print("node_id, plr, rtt, cpu: ", node_id, plr, rtt,    cpu)
+            #print("updated_stats: ", updated_stats); #time.sleep(300)
+            health_metric = fognodecharacterisation.healthMetric(node_id,
+                plr, 
+                rtt, 
+                cpu, 
+                #metrics["Accuracy"],
+                updated_stats["PLR"]["mu"], updated_stats["PLR"]["sigma"],
+                updated_stats["TTL"]["mu"], updated_stats["TTL"]["sigma"],
+                updated_stats["CPU"]["mu"], updated_stats["CPU"]["sigma"] #,
+                #updated_stats["Accuracy"]["mu"], updated_stats["Accuracy"]["sigma"]
+            )
             # Weighted health score
             weighted_health_score = 0.3 * cpu_score + 0.3 * plr_score + 0.4 * rtt_score
 
-            # Update EMA health threshold for all nodes
+            # Update EMA health threshold
+            # health_threshold(t+1) = β * weighted_health_score(t) + (1 - β) * health_threshold(t)
+            # health_threshold = self.beta * weighted_health_score + (1 - self.beta) * self.ema_health[node_id]
             if self.ema_health[node_id] is None:
                 self.ema_health[node_id] = weighted_health_score
             else:
@@ -109,26 +168,45 @@ class EMALiveMultiNodeDashboard:
                 )
             
             health_threshold = self.ema_health[node_id]
-            health_difference = weighted_health_score - health_threshold
-
-            # Determine health status based on difference and absolute score
+            print("health_threshold: ", health_threshold, "health_metric: ", health_metric)
+            try:
+                health_difference = health_metric - health_threshold
+            except:
+                health_difference = 0
+                
+            # Determine health status
             if health_difference > 0 or health_difference == 0:
-                if weighted_health_score > 0.8:
+                health_status = "GOOD"
+                """if weighted_health_score > 0.8:
                     health_status = "GOOD"
                 elif weighted_health_score > 0.6:
                     health_status = "FAIR"
                 else:
-                    health_status = "POOR"
+                    health_status = "POOR" """
             else:
                 health_status = "FAULTY"
 
-            # Store metrics in dataset for all nodes
-            self.dataset['timestamp'].append(current_time)
+            print("node_id: ", node_id)
+            node_metric["timestamp"] = current_time.isoformat()
+            node_metric["node_id"] = node_id
+            node_metric["plr"] = plr
+            node_metric["cpu"] = cpu
+            node_metric["rtt"] = rtt
+            node_metric["health_threshold"] = health_threshold
+            node_metric["health_metric"] = health_metric
+            node_metric["health_status"] = health_status
+            
+            node_metrics[node_id] = node_metric
+            
+        
+            print("node_metric: ", node_metric)
+            # Store metrics
+            self.dataset['timestamp'].append(current_time.isoformat())
             self.dataset['node_id'].append(node_id)
             self.dataset['plr'].append(plr)
             self.dataset['cpu'].append(cpu)
             self.dataset['rtt'].append(rtt)
-            self.dataset['weighted_health_score'].append(weighted_health_score)
+            self.dataset['health_metric'].append(health_metric)
             self.dataset['health_threshold'].append(health_threshold)
             self.dataset['health_difference'].append(health_difference)
             self.dataset['health_status'].append(health_status)
@@ -139,14 +217,20 @@ class EMALiveMultiNodeDashboard:
 
             # Only update plot histories for sample nodes
             if node_id in self.sample_node_ids:
-                self.health_histories[node_id].append(weighted_health_score)
+                self.health_histories[node_id].append(health_metric)
                 self.cpu_histories[node_id].append(cpu_score)
                 self.plr_histories[node_id].append(plr_score)
                 self.rtt_histories[node_id].append(rtt_score)
+                self.threshold_histories[node_id].append(health_threshold)
 
-                for hist in [self.health_histories, self.cpu_histories, self.plr_histories, self.rtt_histories]:
+                for hist in [self.health_histories, self.cpu_histories, 
+                           self.plr_histories, self.rtt_histories,
+                           self.threshold_histories]:
                     hist[node_id] = hist[node_id][-self.maxlen:]
 
+        print("node_metrics: ", node_metrics); time.sleep(3)
+        with open('data/initialisation_node_metric.json', 'w') as fp:
+            json.dump(node_metrics, fp, indent=4) 
         # Update plots only for sample nodes
         for i, node_id in enumerate(self.sample_node_ids):
             if i >= len(self.axs) or node_id not in self.health_histories:
@@ -158,30 +242,38 @@ class EMALiveMultiNodeDashboard:
             self.cpu_lines[node_id].set_data(xs, self.cpu_histories[node_id])
             self.plr_lines[node_id].set_data(xs, self.plr_histories[node_id])
             self.rtt_lines[node_id].set_data(xs, self.rtt_histories[node_id])
+            self.threshold_lines[node_id].set_data(xs, self.threshold_histories[node_id])
 
             ax = self.axs[i]
             ax.set_xlim(0, max(self.maxlen, len(xs)))
             
-            # Get the latest health status for this node
+            # Get latest health status
             latest_status = "UNKNOWN"
             for idx in reversed(range(len(self.dataset['node_id']))):
                 if self.dataset['node_id'][idx] == node_id:
                     latest_status = self.dataset['health_status'][idx]
                     break
 
-            # Update title with health status and color
-            if latest_status == "GOOD":
-                ax.set_title(f"{node_id} - Health (GOOD)", fontsize=10, color='green')
-            elif latest_status == "FAIR":
-                ax.set_title(f"{node_id} - Health (FAIR)", fontsize=10, color='#FFC107')
-            elif latest_status == "POOR":
-                ax.set_title(f"{node_id} - Health (POOR)", fontsize=10, color='#FF5722')
-            else:
-                ax.set_title(f"{node_id} - Faulty", fontsize=10, color='#607D8B')
+            # Update title with status and color
+            status_colors = {
+                "GOOD": 'green',
+                "FAIR": '#FFC107',  # Amber
+                "POOR": '#FF5722',  # Orange
+                "FAULTY": '#F44336'  # Red
+            }
+            ax.set_title(f"{node_id} - {latest_status}", 
+                        fontsize=12, 
+                        color=status_colors.get(latest_status, 'black'),
+                        fontweight='bold')
+            
+            # Change border color based on status
+            for spine in ax.spines.values():
+                spine.set_color(status_colors.get(latest_status, '#dddddd'))
 
         return [
             line for lines in [
-                self.lines, self.cpu_lines, self.plr_lines, self.rtt_lines
+                self.lines, self.cpu_lines, self.plr_lines, 
+                self.rtt_lines, self.threshold_lines
             ] for line in lines.values()
         ]
 
@@ -189,13 +281,25 @@ class EMALiveMultiNodeDashboard:
         """Return the collected metrics as a pandas DataFrame"""
         return pd.DataFrame(self.dataset)
     
-    def save_metrics_to_csv(self, filename="data/node_metrics_data.csv"):
+    def save_metrics_to_csv(self,  filename="data/node_metrics_data.csv"):
         """Save the collected metrics to a CSV file"""
         df = self.get_metrics_dataset()
         df.to_csv(filename, index=False)
         return df
 
+    def save_node_metrics_json(self, node_metrics, output_file):
+        """Save processed metrics to JSON file"""
+        try:
+            with open(output_file, 'w') as fp:
+                json.dump(node_metrics, fp, indent=4)
+            print(f"Results saved to {output_file}")
+        except Exception as e:
+            print(f"Error saving results: {e}")
+            
     def run(self):
         ani = FuncAnimation(self.fig, self.update_plot, interval=300, blit=False, cache_frame_data=False)
         plt.show()
         return ani
+    
+    
+        

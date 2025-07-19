@@ -1,7 +1,12 @@
-# ---------------------- core/sample_generators.py ----------------------
+
+# ---------------------- utils/node_utils.py ----------------------
+from collections import defaultdict
 import json
+import math
 import os
 import random
+import time
+from typing import Dict
 import pandas as pd
 
 def create_node_list():
@@ -192,3 +197,157 @@ def select_random_nodes(node_ids, n):
     
     # Combine mandatory nodes with randomly selected nodes
     return mandatory_nodes + selected_random_nodes
+
+
+class fogNodeCharacterisation(object):
+    """Enhanced node characterization with proper statistical tracking"""
+    
+    def __init__(self, WEIGHTS, STATIC_THRESHOLDS, ALPHA, *args):
+        self.G = {}
+        self.WEIGHTS = WEIGHTS
+        self.STATIC_THRESHOLDS = STATIC_THRESHOLDS
+        if not (0 < ALPHA < 1):
+            raise ValueError("alpha must be between 0 and 1.")
+        self.ALPHA = ALPHA
+        
+        # Persistent storage for node statistics
+        self.node_stats = {}  
+        self.current_thresholds = {}
+        self.M2 = 0.0
+        
+        # Minimum sigma values to prevent division by zero
+        self.MIN_SIGMA = {
+            "PLR": 0.001,
+            "TTL": 0.1,
+            "CPU": 0.1,
+            "Accuracy": 0.1
+        }
+        
+        # Initial default values for when n=1
+        self.INITIAL_SIGMA = {
+            "PLR": 0.005,
+            "TTL": 10.0,
+            "CPU": 5.0,
+            "Accuracy": 2.0
+        }
+        # Add warmup period tracking
+        self.warmup_samples = 5  # Number of samples needed before calculating z-scores
+        self.node_sample_counts = defaultdict(int)  # Track samples per node
+        
+        super(fogNodeCharacterisation, self).__init__(*args)
+        
+        
+        
+    def muAndsigma_per_node(self, node_id: int, new_plr: float, new_ttl: float, new_cpu: float) -> Dict:
+        """Calculate running statistics with warmup period handling"""
+        if node_id not in self.node_stats:
+            self._initialize_node_stats(node_id)
+            
+        self.node_sample_counts[node_id] += 1
+        
+        updated_metrics = {}
+        metrics = [
+            ("PLR", new_plr),
+            ("TTL", new_ttl), 
+            ("CPU", new_cpu)
+        ]
+
+        for metric, value in metrics:
+            stats = self.node_stats[node_id][metric]
+            stats["n"] += 1
+            delta = value - stats["mu"]
+            stats["mu"] += delta / stats["n"]
+            delta2 = value - stats["mu"]
+            stats["sum_sq"] += delta * delta2
+            
+            # Only calculate sigma after warmup period
+            if stats["n"] > 1:
+                variance = stats["sum_sq"] / (stats["n"] - 1)
+                stats["sigma"] = max(math.sqrt(abs(variance)), self.MIN_SIGMA[metric])
+            else:
+                stats["sigma"] = self.INITIAL_SIGMA[metric]
+
+            updated_metrics[metric] = {
+                "mu": stats["mu"],
+                "sigma": stats["sigma"]
+            }
+
+        return updated_metrics
+
+    def healthMetric(self, node_id, plr: float, ttl: float, cpu: float,
+                    plr_mean: float, plr_std: float, 
+                    ttl_mean: float, ttl_std: float,
+                    cpu_mean: float, cpu_std: float) -> float:
+        """Enhanced health metric calculation with warmup handling"""
+        # Apply sigma flooring
+        plr_std = max(plr_std, self.MIN_SIGMA["PLR"])
+        ttl_std = max(ttl_std, self.MIN_SIGMA["TTL"])
+        cpu_std = max(cpu_std, self.MIN_SIGMA["CPU"])
+
+        # Calculate z-scores with warmup protection
+        z_plr = (plr - plr_mean) / plr_std if plr_std > 0 else 0
+        z_ttl = (ttl - ttl_mean) / ttl_std if ttl_std > 0 else 0 
+        z_cpu = (cpu - cpu_mean) / cpu_std if cpu_std > 0 else 0
+        
+        # Standardise each metric (Z-score)
+        z_plr       = (plr - plr_mean) / plr_std if plr_std != 0 else 0.0
+        z_ttl       = (ttl - ttl_mean) / ttl_std if ttl_std != 0 else 0.0
+        z_cpu       = (cpu - cpu_mean) / cpu_std if cpu_std != 0 else 0.0
+        
+
+        # Weighted sum
+        h = (self.WEIGHTS["PLR"] * z_plr +
+             self.WEIGHTS["TTL"] * z_ttl +
+             self.WEIGHTS["CPU"] * z_cpu)
+        
+        # Apply EMA smoothing after warmup
+        if self.node_sample_counts.get(node_id, 0) > self.warmup_samples:
+            if self.ema_health.get(node_id) is None:
+                self.ema_health[node_id] = h
+            else:
+                self.ema_health[node_id] = self.ALPHA * h + (1 - self.ALPHA) * self.ema_health[node_id]
+            return self.ema_health[node_id]
+        
+        return h
+
+    
+    def healthMetric2(self, plr, response, cpu, accuracy, 
+                    plr_mean, plr_std, response_mean, response_std, 
+                 cpu_mean, cpu_std) -> float:
+        """
+        Computes the health metric h_i(t) for a node at time t.
+        
+        Args:
+            plr, response, cpu, accuracy: Current observed values.
+            *_mean, *_std: Historical mean and standard deviation for each metric.
+        
+        Returns:
+            float: Health score h_i(t).
+        """
+        WEIGHTS = self.WEIGHTS # {"PLR": 0.3, "Response": 0.2, "CPU": 0.3, "Accuracy": 0.2}
+        
+        # Standardise each metric (Z-score)
+        z_plr       = (plr - plr_mean) / plr_std if plr_std != 0 else 0.0
+        z_response  = (response - response_mean) / response_std if response_std != 0 else 0.0
+        z_cpu       = (cpu - cpu_mean) / cpu_std if cpu_std != 0 else 0.0
+        
+        #print("z_plr: ", z_plr, "\n z_response: ", z_response, "\n z_cpu", z_cpu, "\n z_accuracy: ", z_accuracy)
+        
+        # Apply weights and sum
+        h = (WEIGHTS["PLR"] * z_plr + 
+            WEIGHTS["Response"] * z_response + 
+            WEIGHTS["CPU"] * z_cpu  
+            )
+        
+        return h
+
+
+    def _initialize_node_stats(self, node_id: str):
+        """Initialize statistics for a new node"""
+        self.node_stats[node_id] = {
+            "PLR": {"n": 0, "mu": 0, "sum_sq": 0, "sigma": self.INITIAL_SIGMA["PLR"]},
+            "TTL": {"n": 0, "mu": 0, "sum_sq": 0, "sigma": self.INITIAL_SIGMA["TTL"]},
+            "CPU": {"n": 0, "mu": 0, "sum_sq": 0, "sigma": self.INITIAL_SIGMA["CPU"]}
+        }
+        self.node_sample_counts[node_id] = 0
+
